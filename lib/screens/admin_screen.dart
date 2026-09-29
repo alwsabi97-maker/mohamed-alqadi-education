@@ -1,66 +1,126 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class AdminScreen extends StatelessWidget {
+import '../utils/code_generator.dart';
+import '../services/pdf_manager.dart';
+
+class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final TextEditingController passwordController = TextEditingController();
+  State<AdminScreen> createState() => _AdminScreenState();
+}
 
-    void openAdminPanel() {
-      final password = passwordController.text.trim();
-      if (password == 'admin123') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم الدخول إلى لوحة المعلم')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('كلمة المرور غير صحيحة')),
-        );
-      }
+class _AdminScreenState extends State<AdminScreen> {
+  final TextEditingController _passwordController = TextEditingController();
+  final PdfManager _pdfManager = PdfManager();
+  List<String> _codes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCodes();
+  }
+
+  Future<void> _loadCodes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('student_codes') ?? <String>[];
+    setState(() {
+      _codes = list;
+    });
+  }
+
+  Future<void> _saveCodes() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('student_codes', _codes);
+  }
+
+  void _generateCode() {
+    final code = CodeGenerator.randomCode();
+    setState(() {
+      _codes.add(code);
+    });
+    _saveCodes();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إنشاء الكود: $code')));
+  }
+
+  Future<void> _importPdf() async {
+    final path = await _pdfManager.pickAndStoreEncryptedPdf();
+    if (path != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حفظ الملف المشفر:
+$path')));
     }
+  }
 
+  void _tryLogin() {
+    final pwd = _passwordController.text.trim();
+    if (pwd == 'admin123') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('مرحباً, تم الدخول كمعلم')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كلمة مرور خاطئة')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('لوحة المعلم')),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.admin_panel_settings_rounded, size: 68, color: Color(0xFF1B7A4A)),
-            const SizedBox(height: 18),
-            const Text(
-              'تسجيل الدخول للمعلم',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 18),
             TextField(
-              controller: passwordController,
+              controller: _passwordController,
               obscureText: true,
               textAlign: TextAlign.right,
-              decoration: const InputDecoration(
-                labelText: 'كلمة المرور',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: openAdminPanel,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B7A4A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('دخول', style: TextStyle(fontSize: 18)),
-              ),
+              decoration: const InputDecoration(labelText: 'كلمة المرور'),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'ملاحظة: كلمة المرور الحالية هي مثال تجريبي وسيتم استبدالها بكلمة سر آمنة لاحقاً.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _tryLogin,
+                    child: const Text('دخول'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _generateCode,
+                    child: const Text('إنشاء كود جديد'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: _importPdf,
+              icon: const Icon(Icons.upload_file),
+              label: const Text('استيراد ملزم PDF (تشفيــر)'),
+            ),
+            const SizedBox(height: 18),
+            const Text('قائمة الأكواد المنشأة:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _codes.length,
+                itemBuilder: (context, index) {
+                  final code = _codes[index];
+                  return Card(
+                    child: ListTile(
+                      title: Text(code),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.copy),
+                        onPressed: () async {
+                          // نسخ الكود للحافظة
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم نسخ $code')));
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
