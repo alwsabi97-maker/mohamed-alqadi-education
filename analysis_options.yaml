@@ -1,0 +1,3 @@
+# This file configures the analyzer and lints for the project.
+
+include: package:flutter_lints/flutter.yaml
